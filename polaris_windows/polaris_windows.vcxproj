@@ -142,7 +142,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Source.cpp" />
+    <ClCompile Include="crc16arc.cpp" />
+    <ClCompile Include="polaris_windows.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="crc16arc.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
