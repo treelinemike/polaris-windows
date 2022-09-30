@@ -113,7 +113,7 @@ int main(void) {
 }
 
 
-/* Send a Command to the polaris */
+// Send a Command to the polaris
 int sendPolaris(Serial* port, const void* ascii_cmd) {
 
 	// add crc-16/arc to end of ascii command
@@ -145,7 +145,9 @@ int sendPolaris(Serial* port, const void* ascii_cmd) {
 	return 0;
 }
 
-/* Read a command from the Polaris */
+// Read a command from the Polaris
+// writes response (without CRC or terminating \r to resp_buffer
+// also writes \0 to resp_buffer[buffer_size], so resp_buff needs to be of size (buffer_size+1)
 int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, unsigned int& buffer_size) {
 
 	// get response from polaris
@@ -162,7 +164,7 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 	memcpy(polaris_response_cstr, polaris_response.c_str(), polaris_response.length());
 	*(polaris_response_cstr + polaris_response.length()) = '\0';
 
-	if (polaris_response.length() <= max_buffer_size) {
+	if (max_buffer_size < (polaris_response.length()-4)) { // -4 takes out CRC, leaves room for \0
 
 		// copy everything but CRC and \r to response buffer
 		memcpy(resp_buffer, polaris_response_cstr, polaris_response.length() - 5);
