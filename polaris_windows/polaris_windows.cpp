@@ -164,7 +164,7 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 	memcpy(polaris_response_cstr, polaris_response.c_str(), polaris_response.length());
 	*(polaris_response_cstr + polaris_response.length()) = '\0';
 
-	if (max_buffer_size < (polaris_response.length()-4)) { // -4 takes out CRC, leaves room for \0
+	if (max_buffer_size >= (polaris_response.length()-4)) { // -4 takes out CRC, leaves room for \0
 
 		// copy everything but CRC and \r to response buffer
 		memcpy(resp_buffer, polaris_response_cstr, polaris_response.length() - 5);
