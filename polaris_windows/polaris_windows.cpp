@@ -10,6 +10,7 @@
 #include <cassert>
 
 #define POLARIS_DEBUG false
+#define RESP_BUF_SIZE 1024
 
 using namespace std;
 using namespace serial;
@@ -79,18 +80,19 @@ int main(void) {
 	// eventually (slightly) modified this from https://stackoverflow.com/questions/16177295/get-time-since-epoch-in-milliseconds-preferably-using-c11-chrono
 	// now appears to correspond to MATLAB posixtime(datetime('now','TimeZone','UTC')
 	unsigned long long milliseconds_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::system_clock::now().time_since_epoch()).count();
-	printf("Seconds since epoch: %15.4f\r\n",double(milliseconds_since_epoch)/1000.0F);
-
+	double base_unix_timestamp = ((double)milliseconds_since_epoch) / 1000.0F;
+	printf("Base UNIX timestamp: %15.4f\r\n",base_unix_timestamp);
+	
 	// read status of Polaris reset
-	char resp_buffer[256] = { '\0' };
+	char resp_buffer[RESP_BUF_SIZE] = {'\0'};
 	unsigned int buff_size;
-	readPolaris(mySerialPort, resp_buffer, 256, buff_size);
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
 	// send a beep command
 	cout << "Sending BEEP command..." << endl;
 	sendPolaris(mySerialPort,"BEEP:1");  //mySerialPort->write(std::string("BEEP:94205\r"));
-	readPolaris(mySerialPort, resp_buffer, 256, buff_size);
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
 	// close the serial port
