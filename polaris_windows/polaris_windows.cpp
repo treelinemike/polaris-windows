@@ -73,22 +73,13 @@ int main(void) {
 
 	// wait a bit for system to reset, then read status
 	Sleep(3000);
-
+	
 	// get UNIX UTC timestamp here
-	// REQUIRES c++20, set this under project properties>C++>Language
-	std::chrono::utc_clock* myClock = nullptr;
-	const auto baseUnixTime = myClock->now();
-	std::cout << std::format("Current UTC Time: {0:%F} {0:%T}.", baseUnixTime) << endl;
-	std::chrono::duration<double> baseUnixTimestamp = baseUnixTime.time_since_epoch();
-	printf("Seconds since epoch: %0.4f\r\n", baseUnixTimestamp.count());
-
-/*
-	std::chrono::time_point<std::chrono::utc_clock> epochTime;
-	std::cout << std::format("UNIX Time Epoch: {0:%F} {0:%T}.", epochTime) << endl;
-	std::chrono::time_point<std::chrono::utc_clock> baseUnixTime = myClock->now();
-	std::cout << std::format("Base UNIX Timestamp: {0:%F} {0:%T}.", baseUnixTime) << endl;
-	std::chrono::duration<long, std::milli> duration;
-	*/
+	// need to use std::chrono::sys_clock *NOT* sys::chrono:utc_clock b/c utc_clock includes leap seconds
+	// eventually (slightly) modified this from https://stackoverflow.com/questions/16177295/get-time-since-epoch-in-milliseconds-preferably-using-c11-chrono
+	// now appears to correspond to MATLAB posixtime(datetime('now','TimeZone','UTC')
+	unsigned long long milliseconds_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::system_clock::now().time_since_epoch()).count();
+	printf("Seconds since epoch: %15.4f\r\n",double(milliseconds_since_epoch)/1000.0F);
 
 	// read status of Polaris reset
 	char resp_buffer[256] = { '\0' };
