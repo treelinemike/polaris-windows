@@ -38,7 +38,7 @@ int main(void) {
 
 	// open the serial port
 	cout << "Opening serial port..." << endl;
-	std::string myPort("COM3");
+	std::string myPort("COM5");
 	Serial*  mySerialPort = NULL;
 	try {
 		mySerialPort = new Serial(myPort, 9600U, Timeout(10, 100, 2, 100, 2), eightbits, parity_none, stopbits_one, flowcontrol_none);
@@ -73,7 +73,7 @@ int main(void) {
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
 	// send a beep:1 command
-	cout << "Sending BEEP command..." << endl;
+	cout << "Sending BEEP:1 command..." << endl;
 	sendPolaris(mySerialPort,"BEEP:1");  //mySerialPort->write(std::string("BEEP:94205\r"));
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
@@ -97,7 +97,7 @@ int main(void) {
 	mySerialPort->flush();
 
 	// send a beep:2 command
-	cout << "Sending BEEP command..." << endl;
+	cout << "Sending BEEP:2 command..." << endl;
 	sendPolaris(mySerialPort, "BEEP:2");
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
@@ -122,21 +122,52 @@ int main(void) {
 
 	// NOW SEND TOOL DEF. FILE(S)
 	// test reading in the binary ROM file
-	uint32_t bytecount = 0;
-	char filebuf[16] = { '\0' };
+	uint16_t bytecount = 0;
+	uint8_t tool_id_char = 'A';
+	char filebuf[64] = { '\0' }; // binary storage
+	char cmdbuf[139] = { '\0' }; // ASCII storage
+	char* pCmdbuf = nullptr;
 	std::streamsize bytes;
 	std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
 	while (!romfile.eof()) {
-		romfile.read(filebuf, 16);
+
+		// initialize command string for next segment of ROM file data
+		sprintf_s(cmdbuf, "PVWR:%C%04X", tool_id_char,bytecount);
+		pCmdbuf = cmdbuf + 10;
+
+		// read up to 64 bytes from ROM file
+		// TODO: should ensure that we always get 64 bytes except for at EOF
+		// should rework so we read entire ROM into memory first then send to Polaris
+		romfile.read(filebuf, 64);
 		bytes = romfile.gcount();
 		bytecount += bytes;
+
 		for (unsigned int j = 0; j < bytes; j++) {
-			printf("%02X ", (uint8_t)filebuf[j]);
+			//printf("%02X ", ((uint8_t)filebuf[j]));
+			//_itoa_s((uint8_t)filebuf[j], pCmdbuf, 3,16);
+			sprintf_s(pCmdbuf, 3, "%02X", (uint8_t)filebuf[j]); // slow! TODO replace with	https://github.com/fmtlib/fmt
+			//printf("itoa result <%s>\r\n", pCmdbuf);
+			pCmdbuf += 2;
 		}
-		printf("\r\n");
+
+		// pad command buffer with FF
+		while (pCmdbuf < (cmdbuf + 138)) {
+			sprintf_s(pCmdbuf, 3, "FF");
+			pCmdbuf += 2;
+		}
+
+		// send current command buffer with ROM file data 
+		cout << "Sending ROM file segment..." << endl;
+		sendPolaris(mySerialPort, cmdbuf);
+		readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 	}
+	
+	// close the ROM file
 	romfile.close();
-	printf("Read a total of %d bytes\r\n", bytecount);
+	printf("Read a total of %d bytes from ROM file\r\n", bytecount);
+
+
 
 	// close serial port
 	mySerialPort->close();
@@ -191,6 +222,7 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 
 	if (polaris_response.back() != '\r') {
 		printf("ERROR: RESPONSE DOESN'T END IN <CR>!\r\n"); // TODO: Handle appropriately
+		printf("Entire response <%s>\r\n", polaris_response.c_str());
 	}
 
 	// copy response into a legit c string
