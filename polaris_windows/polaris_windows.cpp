@@ -22,23 +22,6 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 // main
 int main(void) {
 	
-	// test reading in the binary ROM file
-	uint32_t bytecount = 0;
-	char filebuf[16] = {'\0'};
-	std::streamsize bytes;
-	std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
-	while (!romfile.eof()) {
-		romfile.read(filebuf,16);
-		bytes = romfile.gcount();
-		bytecount += bytes;
-		for (unsigned int j = 0; j < bytes; j++) {
-			printf("%02X ", (uint8_t)filebuf[j]);
-		}
-		printf("\r\n");
-	}
-	romfile.close();
-	printf("Read a total of %d bytes\r\n", bytecount);
-
 	// find available COM ports
 	vector<PortInfo> all_ports = list_ports();
 	if (all_ports.size() > 0) {
@@ -89,13 +72,73 @@ int main(void) {
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
-	// send a beep command
+	// send a beep:1 command
 	cout << "Sending BEEP command..." << endl;
 	sendPolaris(mySerialPort,"BEEP:1");  //mySerialPort->write(std::string("BEEP:94205\r"));
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
-	// close the serial port
+	// now we need to change baud rate to 57,600
+	cout << "Commanding Polaris baud rate change..." << endl;
+	sendPolaris(mySerialPort, "COMM:40000");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// close and re-open serial port at 57,600
+	mySerialPort->close();
+	Sleep(500);
+	try {
+		mySerialPort = new Serial(myPort, 57600U, Timeout(10, 100, 2, 100, 2), eightbits, parity_none, stopbits_one, flowcontrol_none);
+	}
+	catch (IOException e) {
+		cout << e.what();
+		return -1;
+	};
+	mySerialPort->flush();
+
+	// send a beep:2 command
+	cout << "Sending BEEP command..." << endl;
+	sendPolaris(mySerialPort, "BEEP:2");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// send a init command
+	cout << "Sending INIT command..." << endl;
+	sendPolaris(mySerialPort, "INIT:");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// select volume (without querying them first...) command
+	cout << "Selecting Polaris volume..." << endl;
+	sendPolaris(mySerialPort, "VSEL:1");;
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// set illuminator rate to 20Hz
+	cout << "Setting illuminator rate..." << endl;
+	sendPolaris(mySerialPort, "IRATE:0");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// NOW SEND TOOL DEF. FILE(S)
+	// test reading in the binary ROM file
+	uint32_t bytecount = 0;
+	char filebuf[16] = { '\0' };
+	std::streamsize bytes;
+	std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
+	while (!romfile.eof()) {
+		romfile.read(filebuf, 16);
+		bytes = romfile.gcount();
+		bytecount += bytes;
+		for (unsigned int j = 0; j < bytes; j++) {
+			printf("%02X ", (uint8_t)filebuf[j]);
+		}
+		printf("\r\n");
+	}
+	romfile.close();
+	printf("Read a total of %d bytes\r\n", bytecount);
+
+	// close serial port
 	mySerialPort->close();
 
 	// report success
