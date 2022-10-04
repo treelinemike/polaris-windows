@@ -38,10 +38,10 @@ int main(void) {
 
 	// open the serial port
 	cout << "Opening serial port..." << endl;
-	std::string myPort("COM5");
+	std::string myPort("COM3");
 	Serial*  mySerialPort = NULL;
 	try {
-		mySerialPort = new Serial(myPort, 9600U, Timeout(10, 100, 2, 100, 2), eightbits, parity_none, stopbits_one, flowcontrol_none);
+		mySerialPort = new Serial(myPort, 9600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
 	}
 	catch (IOException e) {
 		cout << e.what();
@@ -88,7 +88,7 @@ int main(void) {
 	mySerialPort->close();
 	Sleep(500);
 	try {
-		mySerialPort = new Serial(myPort, 57600U, Timeout(10, 100, 2, 100, 2), eightbits, parity_none, stopbits_one, flowcontrol_none);
+		mySerialPort = new Serial(myPort, 57600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
 	}
 	catch (IOException e) {
 		cout << e.what();
@@ -141,6 +141,9 @@ int main(void) {
 		romfile.read(filebuf, 64);
 		bytes = romfile.gcount();
 		bytecount += bytes;
+		if (!romfile.eof())
+			assert(bytes == 64,"Didn't read 64 bytes from ROM file!");
+
 
 		for (unsigned int j = 0; j < bytes; j++) {
 			//printf("%02X ", ((uint8_t)filebuf[j]));
