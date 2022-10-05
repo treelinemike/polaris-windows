@@ -9,7 +9,7 @@
 #include "crc16arc.h"
 #include <cassert>
 
-#define POLARIS_DEBUG false
+#define POLARIS_DEBUG true
 #define RESP_BUF_SIZE 1024
 
 using namespace std;
@@ -38,7 +38,7 @@ int main(void) {
 
 	// open the serial port
 	cout << "Opening serial port..." << endl;
-	std::string myPort("COM3");
+	std::string myPort("COM5");
 	Serial*  mySerialPort = NULL;
 	try {
 		mySerialPort = new Serial(myPort, 9600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
@@ -128,6 +128,7 @@ int main(void) {
 	char cmdbuf[139] = { '\0' }; // ASCII storage
 	char* pCmdbuf = nullptr;
 	std::streamsize bytes;
+	//std::ifstream romfile("C:\\Users\\f002r5k\\Dropbox\\projects\\surg_nav\\NDI\\Polaris\\Tool Definition Files\\Medtronic_960_556.rom", std::ios::binary);
 	std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
 	while (!romfile.eof()) {
 
@@ -170,7 +171,36 @@ int main(void) {
 	romfile.close();
 	printf("Read a total of %d bytes from ROM file\r\n", bytecount);
 
+	// initialize port handle
+	cout << "Initializing port handle..." << endl;
+	sendPolaris(mySerialPort, "PINIT:A");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
+	// enable tool tracking
+	cout << "Enabling tool tracking..." << endl;
+	sendPolaris(mySerialPort, "PENA:AD");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// 1-3 tools, regular tracking mode
+	// >> GX_CMD_STR = "GX:800B";
+	// >> PSTAT_CMD_STR = "PSTAT:801f";
+	//
+	// 1-3 tools, tool ID mode
+	// >> GX_CMD_STR = "GX:9000";
+	// >> PSTAT_CMD_STR = "PSTAT:801f";
+	//
+	// 1-9 tools, regular tracking mode
+	// >> GX_CMD_STR = "GX:A00B";
+	// >> PSTAT_CMD_STR = "PSTAT:A01f";
+
+	// send PSTAT command to confirm tool configuration
+	// TODO: figure out why tool not listed properly (all zeros and a one)... mabye we're not sending the file correctly?
+	cout << "Sending appropriate PSTAT command..." << endl;
+	sendPolaris(mySerialPort, "PSTAT:A01F");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
 	// close serial port
 	mySerialPort->close();
