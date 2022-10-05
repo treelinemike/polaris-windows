@@ -8,6 +8,7 @@
 #include <format>     // for formatting clock stuff
 #include "crc16arc.h"
 #include <cassert>
+#include <yaml-cpp/yaml.h>
 
 #define POLARIS_DEBUG true
 #define RESP_BUF_SIZE 1024
@@ -22,6 +23,12 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 // main
 int main(void) {
 	
+	// try to load YAML config file
+	std::ifstream fin("C:\\Users\\f002r5k\\Desktop\\test_config.yaml");
+	YAML::Parser parser(fin);
+	YAML::Node doc;
+	parser.PrintTokens(cout);
+
 	// find available COM ports
 	vector<PortInfo> all_ports = list_ports();
 	if (all_ports.size() > 0) {

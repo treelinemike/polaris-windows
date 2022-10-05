@@ -78,8 +78,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Users\f002r5k\github\serial\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\f002r5k\github\serial\visual_studio\x64\Debug;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\f002r5k\github\serial\include;C:\yaml-cpp-yaml-cpp-0.7.0\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\yaml-cpp-yaml-cpp-0.7.0\lib;C:\Users\f002r5k\github\serial\visual_studio\x64\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -123,7 +123,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>yaml-cppd.lib;serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

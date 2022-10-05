@@ -3,7 +3,7 @@ tool_id_mode: false
 tools:
   A:
     rom_file: "C:\\Users\\f002r5k\\github\\ndi-polaris-tracker\\tool-defs\\medtronic_chicken_foot_960_556.rom"
-	tip_file: null
+    tip_file: null
   B:
     rom_file: "C:\\Users\\f002r5k\\github\\ndi-polaris-tracker\\tool-defs\\medtronic_9730605_referece.rom"
-	tip_file: null
+    tip_file: null
