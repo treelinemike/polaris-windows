@@ -129,7 +129,8 @@ int main(void) {
 	char* pCmdbuf = nullptr;
 	std::streamsize bytes;
 	//std::ifstream romfile("C:\\Users\\f002r5k\\Dropbox\\projects\\surg_nav\\NDI\\Polaris\\Tool Definition Files\\Medtronic_960_556.rom", std::ios::binary);
-	std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
+	//std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
+	std::ifstream romfile("C:\\Users\\f002r5k\\github\\ndi-polaris-tracker\\tool-defs\\medtronic_chicken_foot_960_556.rom", std::ios::binary);
 	while (!romfile.eof()) {
 
 		// initialize command string for next segment of ROM file data
@@ -198,9 +199,24 @@ int main(void) {
 	// send PSTAT command to confirm tool configuration
 	// TODO: figure out why tool not listed properly (all zeros and a one)... mabye we're not sending the file correctly?
 	cout << "Sending appropriate PSTAT command..." << endl;
-	sendPolaris(mySerialPort, "PSTAT:A01F");
+	sendPolaris(mySerialPort, "PSTAT:801F");
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	// start tracking
+	cout << "Enabling tracking..." << endl;
+	sendPolaris(mySerialPort, "TSTART:");
+	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+	
+	while (1) {
+		// get data
+		cout << "Requesting data..." << endl;
+		sendPolaris(mySerialPort, "GX:800B");
+		readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+	}
 
 	// close serial port
 	mySerialPort->close();
