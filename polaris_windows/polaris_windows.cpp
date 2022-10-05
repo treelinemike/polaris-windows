@@ -216,6 +216,8 @@ int main(void) {
 		sendPolaris(mySerialPort, "GX:800B");
 		readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+		// int16_t q0_i,q1_i,q2_i,q3_i,tx_i,ty_i,tz_i,err_i;
+		// sscanf_s(buffer,"%06d%06d%06d%07d%07d%07d%06d",q0_i,q1_i,q2_i,q3_i,tx_i,ty_i,tz_i,err_i);
 	}
 
 	// close serial port
