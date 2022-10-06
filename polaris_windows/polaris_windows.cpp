@@ -50,8 +50,9 @@ int main(void) {
 
 		// we could just do: this_tool["rom_file"].as<std::string>();
 		// and: this_tool["tip_file"]
-		for (YAML::const_iterator it2 = this_tool.begin(); it2 != this_tool.end(); ++it2) {
-			cout << "   " << it2->first.as<std::string>() << " : " << it2->second.as<std::string>() << endl;
+		//for (YAML::const_iterator it2 = this_tool.begin(); it2 != this_tool.end(); ++it2) {  // requires, eg, it2->first.as<std::string>()
+		for(auto it2 : this_tool){
+			cout << "   " << it2.first.as<std::string>() << " : " << it2.second.as<std::string>() << endl;
 		}
 	}
 	cout << endl;
