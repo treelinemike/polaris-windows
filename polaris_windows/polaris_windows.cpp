@@ -24,10 +24,37 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 int main(void) {
 	
 	// try to load YAML config file
-	std::ifstream fin("C:\\Users\\f002r5k\\Desktop\\test_config.yaml");
-	YAML::Parser parser(fin);
-	YAML::Node doc;
-	parser.PrintTokens(cout);
+	cout << "Reading config file..." << endl;
+	
+	YAML::Node config = YAML::LoadFile("C:\\Users\\f002r5k\\Desktop\\test_config.yaml");
+	
+	bool debug_mode = config["debug_mode"].as<bool>();
+	bool tool_id_mode = config["tool_id_mode"].as<bool>();
+	cout << "Debug mode: " << debug_mode << endl;
+	cout << "Tool ID mode: " << tool_id_mode << endl;
+	cout << "Tools:" << endl;
+
+	YAML::Node tools = config["tools"];
+	for (YAML::const_iterator it = tools.begin(); it != tools.end(); ++it) {
+
+		cout << it->first.as<std::string>() << " : " << endl;
+		YAML::Node this_tool = it->second;
+
+		YAML::Node this_rom_file = this_tool["rom_file"];
+		if (this_rom_file.Type() == YAML::NodeType::Undefined) {
+			cout << "   Couldn't find rom file manually!" << endl;
+		}
+		else {
+			cout << "   Manually rom file: " << this_rom_file.as<std::string>() << endl;
+		}
+
+		// we could just do: this_tool["rom_file"].as<std::string>();
+		// and: this_tool["tip_file"]
+		for (YAML::const_iterator it2 = this_tool.begin(); it2 != this_tool.end(); ++it2) {
+			cout << "   " << it2->first.as<std::string>() << " : " << it2->second.as<std::string>() << endl;
+		}
+	}
+	cout << endl;
 
 	// find available COM ports
 	vector<PortInfo> all_ports = list_ports();
