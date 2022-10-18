@@ -9,6 +9,7 @@
 #include "crc16arc.h"
 #include <cassert>
 #include <yaml-cpp/yaml.h>
+#include <vector>
 
 #define POLARIS_DEBUG true
 #define RESP_BUF_SIZE 1024
@@ -22,41 +23,102 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 
 // main
 int main(void) {
-	
-	// try to load YAML config file
+
+	////////////////////////////// READ IN CONFIG FILE ////////////////////////////
+	// load YAML config file
 	cout << "Reading config file..." << endl;
-	
 	YAML::Node config = YAML::LoadFile("C:\\Users\\f002r5k\\Desktop\\test_config.yaml");
-	
+
 	bool debug_mode = config["debug_mode"].as<bool>();
 	bool tool_id_mode = config["tool_id_mode"].as<bool>();
+	YAML::Node tools = config["tools"];
+	char tool_letter;
 	cout << "Debug mode: " << debug_mode << endl;
 	cout << "Tool ID mode: " << tool_id_mode << endl;
-	cout << "Tools:" << endl;
+	cout << "Number of tools: " << tools.size() << endl;
 
-	YAML::Node tools = config["tools"];
+	// initialize a vector of ToolInfo structs to hold 
+	struct ToolInfo {
+		char letter;
+		string rom_file;
+		string tip_file;
+	};
+	vector<ToolInfo> tool_vec;
+
+	// read in and error check tool config info
 	for (YAML::const_iterator it = tools.begin(); it != tools.end(); ++it) {
 
-		cout << it->first.as<std::string>() << " : " << endl;
+		// temporary storage for this tool info
+		// new_tool will go out of scope but push_back() copies into vector
+		ToolInfo new_tool;
+
+		// get next tool letter
+		try {
+			tool_letter = it->first.as<char>();
+		}
+		catch (YAML::RepresentationException) {
+			cout << "ERROR: Invalid tool letter in config file!" << endl;
+			return -1;
+		}
+
+		// make sure we haven't used this tool letter yet
+		for (auto tvecit = tool_vec.begin(); tvecit != tool_vec.end(); ++tvecit) {
+			if (tvecit->letter == tool_letter) {
+				cout << "ERROR: tool letter '" << tool_letter << "' already used!" << endl;
+				return -1;
+			}
+		}
+
+		// make sure tool letter is within range
+		if (tool_letter < 'A' || tool_letter > 'I') {
+			cout << "ERROR: invalid tool letter '" << tool_letter << endl;
+			return -1;
+		}
+
+		// valid tool letter
+		new_tool.letter = tool_letter;
+
+		// get ROM file name and perform basic error checking
+		// but don't test whether it is a valid filename yet
+		// ROM filename may not be empty / null
 		YAML::Node this_tool = it->second;
-
 		YAML::Node this_rom_file = this_tool["rom_file"];
-		if (this_rom_file.Type() == YAML::NodeType::Undefined) {
-			cout << "   Couldn't find rom file manually!" << endl;
-		}
-		else {
-			cout << "   Manually rom file: " << this_rom_file.as<std::string>() << endl;
+		switch (this_rom_file.Type()) {
+		case YAML::NodeType::Null:
+			cout << "ERROR: ROM file for tool '" << tool_letter << "' cannot be empty" << endl;
+			return -1;
+			break;
+		case YAML::NodeType::Undefined:
+			cout << "ERROR: invalid ROM file text type for tool '" << tool_letter << "'" << endl;
+			return -1;
+			break;
+		default:
+			new_tool.rom_file = this_rom_file.as<std::string>();
 		}
 
-		// we could just do: this_tool["rom_file"].as<std::string>();
-		// and: this_tool["tip_file"]
-		//for (YAML::const_iterator it2 = this_tool.begin(); it2 != this_tool.end(); ++it2) {  // requires, eg, it2->first.as<std::string>()
-		for(auto it2 : this_tool){
-			cout << "   " << it2.first.as<std::string>() << " : " << it2.second.as<std::string>() << endl;
+		// get TIP file name and perform basic error checking
+		// but don't test whether it is a valid filename yet
+		// TIP filename may be empty / null
+		YAML::Node this_tip_file = this_tool["tip_file"];
+		switch (this_tip_file.Type()) {
+		case YAML::NodeType::Null:
+			new_tool.tip_file = "";
+			break;
+		case YAML::NodeType::Undefined:
+			cout << "ERROR: invalid tip file text type for tool '" << tool_letter << "'" << endl;
+			return -1;
+			break;
+		default:
+			new_tool.tip_file = this_tip_file.as<std::string>();
 		}
+
+		// add this tool struct to our vetor
+		tool_vec.push_back(new_tool);
 	}
-	cout << endl;
+	cout << "Successfully loaded " << tool_vec.size() << " tool descriptions from config file." << endl;
 
+
+	///////////////////////////// INITIALIZE COMMS /////////////////////////////
 	// find available COM ports
 	vector<PortInfo> all_ports = list_ports();
 	if (all_ports.size() > 0) {
@@ -74,7 +136,7 @@ int main(void) {
 	// open the serial port
 	cout << "Opening serial port..." << endl;
 	std::string myPort("COM5");
-	Serial*  mySerialPort = NULL;
+	Serial* mySerialPort = NULL;
 	try {
 		mySerialPort = new Serial(myPort, 9600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
 	}
@@ -92,24 +154,24 @@ int main(void) {
 
 	// wait a bit for system to reset, then read status
 	Sleep(3000);
-	
+
 	// get UNIX UTC timestamp here
 	// need to use std::chrono::sys_clock *NOT* sys::chrono:utc_clock b/c utc_clock includes leap seconds
 	// eventually (slightly) modified this from https://stackoverflow.com/questions/16177295/get-time-since-epoch-in-milliseconds-preferably-using-c11-chrono
 	// now appears to correspond to MATLAB posixtime(datetime('now','TimeZone','UTC')
 	unsigned long long milliseconds_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::system_clock::now().time_since_epoch()).count();
 	double base_unix_timestamp = ((double)milliseconds_since_epoch) / 1000.0F;
-	printf("Base UNIX timestamp: %15.4f\r\n",base_unix_timestamp);
-	
+	printf("Base UNIX timestamp: %15.4f\r\n", base_unix_timestamp);
+
 	// read status of Polaris reset
-	char resp_buffer[RESP_BUF_SIZE] = {'\0'};
+	char resp_buffer[RESP_BUF_SIZE] = { '\0' };
 	unsigned int buff_size;
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
 	// send a beep:1 command
 	cout << "Sending BEEP:1 command..." << endl;
-	sendPolaris(mySerialPort,"BEEP:1");  //mySerialPort->write(std::string("BEEP:94205\r"));
+	sendPolaris(mySerialPort, "BEEP:1");  //mySerialPort->write(std::string("BEEP:94205\r"));
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
@@ -137,6 +199,9 @@ int main(void) {
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
+
+	/////////////////////// INITIALIZE THE POLARIS ////////////////////////////////
+
 	// send a init command
 	cout << "Sending INIT command..." << endl;
 	sendPolaris(mySerialPort, "INIT:");
@@ -155,69 +220,85 @@ int main(void) {
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
-	// NOW SEND TOOL DEF. FILE(S)
-	// test reading in the binary ROM file
-	uint16_t bytecount = 0;
-	uint8_t tool_id_char = 'A';
+	/////////////////////////// SEND TOOL DEFINITION FILE(S) ////////////////////////////////
+	
+	uint16_t bytecount;
+	uint8_t tool_id_char;
 	char filebuf[64] = { '\0' }; // binary storage
 	char cmdbuf[139] = { '\0' }; // ASCII storage
 	char* pCmdbuf = nullptr;
 	std::streamsize bytes;
-	//std::ifstream romfile("C:\\Users\\f002r5k\\Dropbox\\projects\\surg_nav\\NDI\\Polaris\\Tool Definition Files\\Medtronic_960_556.rom", std::ios::binary);
-	//std::ifstream romfile("C:\\Users\\f002r5k\\Desktop\\medtronic_9730605_referece.rom", std::ios::binary);
-	std::ifstream romfile("C:\\Users\\f002r5k\\github\\ndi-polaris-tracker\\tool-defs\\medtronic_chicken_foot_960_556.rom", std::ios::binary);
-	while (!romfile.eof()) {
 
-		// initialize command string for next segment of ROM file data
-		sprintf_s(cmdbuf, "PVWR:%C%04X", tool_id_char,bytecount);
-		pCmdbuf = cmdbuf + 10;
+	// iterate through each tool description
+	// and attempt to encode and send the tool parameters
+	for (auto it = tool_vec.begin(); it != tool_vec.end(); ++it) {
 
-		// read up to 64 bytes from ROM file
-		// TODO: should ensure that we always get 64 bytes except for at EOF
-		// should rework so we read entire ROM into memory first then send to Polaris
-		romfile.read(filebuf, 64);
-		bytes = romfile.gcount();
-		bytecount += bytes;
-		if (!romfile.eof())
-			assert(bytes == 64,"Didn't read 64 bytes from ROM file!");
+		// get tool ID letter
+		tool_id_char = it->letter;
+
+		// read ROM file
+		std::ifstream romfile(it->rom_file, std::ios::binary);
+
+		// reset byte count
+		bytecount = 0;
+
+		// break binary ROM file into chunks and send to Polaris
+		while (!romfile.eof()) {
+
+			// initialize command string for next segment of ROM file data
+			sprintf_s(cmdbuf, "PVWR:%C%04X", tool_id_char, bytecount);
+			pCmdbuf = cmdbuf + 10;
+
+			// read up to 64 bytes from ROM file
+			// TODO: should ensure that we always get 64 bytes except for at EOF
+			// should rework so we read entire ROM into memory first then send to Polaris
+			romfile.read(filebuf, 64);
+			bytes = romfile.gcount();
+			bytecount += bytes;
+			if (!romfile.eof())
+				assert(bytes == 64, "Didn't read 64 bytes from ROM file!");
 
 
-		for (unsigned int j = 0; j < bytes; j++) {
-			//printf("%02X ", ((uint8_t)filebuf[j]));
-			//_itoa_s((uint8_t)filebuf[j], pCmdbuf, 3,16);
-			sprintf_s(pCmdbuf, 3, "%02X", (uint8_t)filebuf[j]); // slow! TODO replace with	https://github.com/fmtlib/fmt
-			//printf("itoa result <%s>\r\n", pCmdbuf);
-			pCmdbuf += 2;
+			for (unsigned int j = 0; j < bytes; j++) {
+				//printf("%02X ", ((uint8_t)filebuf[j]));
+				//_itoa_s((uint8_t)filebuf[j], pCmdbuf, 3,16);
+				sprintf_s(pCmdbuf, 3, "%02X", (uint8_t)filebuf[j]); // slow! TODO replace with	https://github.com/fmtlib/fmt
+				//printf("itoa result <%s>\r\n", pCmdbuf);
+				pCmdbuf += 2;
+			}
+
+			// pad command buffer with FF
+			while (pCmdbuf < (cmdbuf + 138)) {
+				sprintf_s(pCmdbuf, 3, "FF");
+				pCmdbuf += 2;
+			}
+
+			// send current command buffer with ROM file data 
+			cout << "Sending ROM file segment..." << endl;
+			sendPolaris(mySerialPort, cmdbuf);
+			readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+			printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 		}
 
-		// pad command buffer with FF
-		while (pCmdbuf < (cmdbuf + 138)) {
-			sprintf_s(pCmdbuf, 3, "FF");
-			pCmdbuf += 2;
-		}
+		// close the ROM file
+		romfile.close();
+		printf("Read a total of %d bytes from ROM file\r\n", bytecount);
 
-		// send current command buffer with ROM file data 
-		cout << "Sending ROM file segment..." << endl;
+		// initialize port handle
+		cout << "Initializing port handle..." << endl;
+		sprintf_s(cmdbuf, "PINIT:%C", tool_id_char);
+
+		sendPolaris(mySerialPort, cmdbuf);
+		readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
+		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+		// enable tool tracking
+		cout << "Enabling tool tracking..." << endl;
+		sprintf_s(cmdbuf, "PENA:%CD", tool_id_char);
 		sendPolaris(mySerialPort, cmdbuf);
 		readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 	}
-	
-	// close the ROM file
-	romfile.close();
-	printf("Read a total of %d bytes from ROM file\r\n", bytecount);
-
-	// initialize port handle
-	cout << "Initializing port handle..." << endl;
-	sendPolaris(mySerialPort, "PINIT:A");
-	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
-	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
-
-	// enable tool tracking
-	cout << "Enabling tool tracking..." << endl;
-	sendPolaris(mySerialPort, "PENA:AD");
-	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
-	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
 	// 1-3 tools, regular tracking mode
 	// >> GX_CMD_STR = "GX:800B";
@@ -244,7 +325,7 @@ int main(void) {
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
-	
+
 	while (1) {
 		// get data
 		cout << "Requesting data..." << endl;
@@ -281,7 +362,7 @@ int sendPolaris(Serial* port, const void* ascii_cmd) {
 	full_cmd_ptr += 4;  // increment pointer just past CRC
 
 #if POLARIS_DEBUG
-	*full_cmd_ptr = '\0'; // add a null terminator for display
+	* full_cmd_ptr = '\0'; // add a null terminator for display
 	printf("Raw command string: %s\r\n", ascii_cmd_char);
 	printf("Command string with CRC: %s\r\n", full_cmd);
 #endif
@@ -318,7 +399,7 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 	memcpy(polaris_response_cstr, polaris_response.c_str(), polaris_response.length());
 	*(polaris_response_cstr + polaris_response.length()) = '\0';
 
-	if (max_buffer_size >= (polaris_response.length()-4)) { // -4 takes out CRC, leaves room for \0
+	if (max_buffer_size >= (polaris_response.length() - 4)) { // -4 takes out CRC, leaves room for \0
 
 		// copy everything but CRC and \r to response buffer
 		memcpy(resp_buffer, polaris_response_cstr, polaris_response.length() - 5);
