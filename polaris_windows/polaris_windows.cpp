@@ -23,6 +23,44 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 
 // main
 int main(void) {
+	std::ifstream gxfile("C:\\Users\\f002r5k\\Desktop\\sample_gx_response.txt", std::ios::in);
+	
+	float q0, q1, q2, q3, tx, ty, tz, fit_err;
+
+	// read polaris response to GX command (from file, for testing)
+	char test[9999];
+	int mycount = 9999;
+	uint8_t num_gx_lines_active = 3;
+	uint8_t num_gx_lines_passive = 3;
+	gxfile.read(test, mycount);
+	test[gxfile.gcount()] = '\0';
+	cout << "Read (" << gxfile.gcount() << "): " << test << endl;
+
+	string tmpstr(test, gxfile.gcount()); // length optional, but needed if there may be zero's in your data
+	istringstream is(tmpstr);
+	string line;
+	vector<string> all_lines;
+	while (getline(is, line)) {
+		all_lines.push_back(line);
+		cout << "Line: " << line << endl;
+	}
+	cout << "Read " << all_lines.size() << " lines..." << endl;
+
+	string thisline = all_lines[5];
+	cout << "Line to analyze: " << thisline << endl;
+	q0 = ((float)atol(thisline.substr(0, 6).c_str())) / 10000.0f;
+	q1 = ((float)atol(thisline.substr(6, 6).c_str())) / 10000.0f;
+	q2 = ((float)atol(thisline.substr(12, 6).c_str())) / 10000.0f;
+	q3 = ((float)atol(thisline.substr(18, 6).c_str())) / 10000.0f;
+	tx = ((float)atol(thisline.substr(24, 7).c_str())) / 100.0f;
+	ty = ((float)atol(thisline.substr(31, 7).c_str())) / 100.0f;
+	tz = ((float)atol(thisline.substr(38, 7).c_str())) / 100.0f;
+	fit_err = ((float)atol(thisline.substr(45, 6).c_str())) / 10000.0f;
+	printf("q0: %7.4f, q1: %7.4f, q2: %7.4f, q3: %7.4f\r\n",q0,q1,q2,q3);
+	printf("tx: %8.2f, ty: %8.2f, tz: %8.2f\r\n", tx, ty, tz);
+	printf("Fit error: %7.4f\r\n", fit_err);
+
+	return -2;
 
 	////////////////////////////// READ IN CONFIG FILE ////////////////////////////
 	// load YAML config file
@@ -237,6 +275,7 @@ int main(void) {
 		tool_id_char = it->letter;
 
 		// read ROM file
+		// TODO: catch file not found exception here
 		std::ifstream romfile(it->rom_file, std::ios::binary);
 
 		// reset byte count
