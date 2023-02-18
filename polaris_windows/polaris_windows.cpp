@@ -12,7 +12,17 @@
 #include <vector>
 
 #define POLARIS_DEBUG true
-#define RESP_BUF_SIZE 1024
+#define RESP_BUF_SIZE 4096
+#define TOOL_MODE_ACTIVE_ONLY 0
+#define TOOL_MODE_PASSIVE_3 1
+#define TOOL_MODE_PASSIVE_9 2
+#define TRACKING_MODE_NORMAL 0
+#define TRACKING_MODE_TOOL_ID 1
+#define GX_CMD_STRAY_3 "GX:9000"  // 1-3 tools, stray returns reported
+#define GX_CMD_TRACK_3 "GX:800B"  // 1-3 tools, regular tracking
+#define GX_CMD_TRACK_9 "GX:A00B"  // 1-9 tools, regular tracking
+#define PSTAT_CMD_PASSIVE_3 "PSTAT:801F" // summary info for 1-3 tools
+#define PSTAT_CMD_PASSIVE_9 "PSTAT:A01F" // summary info for 1-9 tools
 
 using namespace std;
 using namespace serial;
@@ -23,10 +33,15 @@ int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, u
 
 // main
 int main(void) {
-	std::ifstream gxfile("C:\\Users\\f002r5k\\Desktop\\sample_gx_response.txt", std::ios::in);
+	//std::ifstream gxfile("C:\\Users\\f002r5k\\Desktop\\sample_gx_response.txt", std::ios::in);
 	
 	float q0, q1, q2, q3, tx, ty, tz, fit_err;
+	uint8_t tool_mode = TOOL_MODE_ACTIVE_ONLY;
+	uint8_t tracking_mode = TRACKING_MODE_NORMAL;
+	char cmd_str_pstat[16] = { '\0' };
+	char cmd_str_gx[16] = { '\0' };
 
+	/*
 	// read polaris response to GX command (from file, for testing)
 	char test[9999];
 	int mycount = 9999;
@@ -36,7 +51,7 @@ int main(void) {
 	test[gxfile.gcount()] = '\0';
 	cout << "Read (" << gxfile.gcount() << "): " << test << endl;
 
-	string tmpstr(test, gxfile.gcount()); // length optional, but needed if there may be zero's in your data
+	string tmpstr(test, gxfile.gcount());
 	istringstream is(tmpstr);
 	string line;
 	vector<string> all_lines;
@@ -46,21 +61,21 @@ int main(void) {
 	}
 	cout << "Read " << all_lines.size() << " lines..." << endl;
 
-	string thisline = all_lines[5];
-	cout << "Line to analyze: " << thisline << endl;
-	q0 = ((float)atol(thisline.substr(0, 6).c_str())) / 10000.0f;
-	q1 = ((float)atol(thisline.substr(6, 6).c_str())) / 10000.0f;
-	q2 = ((float)atol(thisline.substr(12, 6).c_str())) / 10000.0f;
-	q3 = ((float)atol(thisline.substr(18, 6).c_str())) / 10000.0f;
-	tx = ((float)atol(thisline.substr(24, 7).c_str())) / 100.0f;
-	ty = ((float)atol(thisline.substr(31, 7).c_str())) / 100.0f;
-	tz = ((float)atol(thisline.substr(38, 7).c_str())) / 100.0f;
-	fit_err = ((float)atol(thisline.substr(45, 6).c_str())) / 10000.0f;
+	string this_line = all_lines[5];
+	cout << "Line to analyze: " << this_line << endl;
+	q0 = ((float)atol(this_line.substr(0, 6).c_str())) / 10000.0f;
+	q1 = ((float)atol(this_line.substr(6, 6).c_str())) / 10000.0f;
+	q2 = ((float)atol(this_line.substr(12, 6).c_str())) / 10000.0f;
+	q3 = ((float)atol(this_line.substr(18, 6).c_str())) / 10000.0f;
+	tx = ((float)atol(this_line.substr(24, 7).c_str())) / 100.0f;
+	ty = ((float)atol(this_line.substr(31, 7).c_str())) / 100.0f;
+	tz = ((float)atol(this_line.substr(38, 7).c_str())) / 100.0f;
+	fit_err = ((float)atol(this_line.substr(45, 6).c_str())) / 10000.0f;
 	printf("q0: %7.4f, q1: %7.4f, q2: %7.4f, q3: %7.4f\r\n",q0,q1,q2,q3);
 	printf("tx: %8.2f, ty: %8.2f, tz: %8.2f\r\n", tx, ty, tz);
 	printf("Fit error: %7.4f\r\n", fit_err);
+	*/
 
-	return -2;
 
 	////////////////////////////// READ IN CONFIG FILE ////////////////////////////
 	// load YAML config file
@@ -69,6 +84,10 @@ int main(void) {
 
 	bool debug_mode = config["debug_mode"].as<bool>();
 	bool tool_id_mode = config["tool_id_mode"].as<bool>();
+	if (tool_id_mode) {
+		tracking_mode = TRACKING_MODE_TOOL_ID;
+	}
+	std::string com_port = config["com_port"].as<std::string>();
 	YAML::Node tools = config["tools"];
 	char tool_letter;
 	cout << "Debug mode: " << debug_mode << endl;
@@ -116,6 +135,13 @@ int main(void) {
 		// valid tool letter
 		new_tool.letter = tool_letter;
 
+		// update mode based on tool letter
+		if (tool_mode == TOOL_MODE_ACTIVE_ONLY && tool_letter >= 'A' && tool_letter <= 'C') {
+			tool_mode = TOOL_MODE_PASSIVE_3;
+		}else if (tool_mode == TOOL_MODE_PASSIVE_3 && tool_letter >= 'D' && tool_letter <= 'I') {
+			tool_mode = TOOL_MODE_PASSIVE_9;
+		}
+
 		// get ROM file name and perform basic error checking
 		// but don't test whether it is a valid filename yet
 		// ROM filename may not be empty / null
@@ -155,6 +181,23 @@ int main(void) {
 	}
 	cout << "Successfully loaded " << tool_vec.size() << " tool descriptions from config file." << endl;
 
+	///////////////////////////// CONFIGURE COMMANDS ///////////////////////////
+	cout << "Setting PSTAT and GX command strings..." << endl;
+	if (tracking_mode == TRACKING_MODE_NORMAL && tool_mode == TOOL_MODE_PASSIVE_3) {
+		memcpy(cmd_str_gx, GX_CMD_TRACK_3, strlen(GX_CMD_TRACK_3));
+		memcpy(cmd_str_pstat, PSTAT_CMD_PASSIVE_3, strlen(PSTAT_CMD_PASSIVE_3));
+	}
+	else if (tracking_mode == TRACKING_MODE_NORMAL && tool_mode == TOOL_MODE_PASSIVE_9) {
+		memcpy(cmd_str_gx, GX_CMD_TRACK_9, strlen(GX_CMD_TRACK_9));
+		memcpy(cmd_str_pstat, PSTAT_CMD_PASSIVE_9, strlen(PSTAT_CMD_PASSIVE_9));
+	}
+	else if (tracking_mode == TRACKING_MODE_TOOL_ID && tool_mode == TOOL_MODE_PASSIVE_3) {
+		memcpy(cmd_str_gx, GX_CMD_STRAY_3, strlen(GX_CMD_STRAY_3));
+		memcpy(cmd_str_pstat, PSTAT_CMD_PASSIVE_3, strlen(PSTAT_CMD_PASSIVE_3));
+	}
+	else {
+		cout << "ERROR: unhandled mode!" << endl;
+	}
 
 	///////////////////////////// INITIALIZE COMMS /////////////////////////////
 	// find available COM ports
@@ -172,11 +215,10 @@ int main(void) {
 	}
 
 	// open the serial port
-	cout << "Opening serial port..." << endl;
-	std::string myPort("COM5");
+	cout << "Attempting to open " << com_port << "..." << endl;
 	Serial* mySerialPort = NULL;
 	try {
-		mySerialPort = new Serial(myPort, 9600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
+		mySerialPort = new Serial(com_port, 9600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
 	}
 	catch (IOException e) {
 		cout << e.what();
@@ -223,7 +265,7 @@ int main(void) {
 	mySerialPort->close();
 	Sleep(500);
 	try {
-		mySerialPort = new Serial(myPort, 57600U, Timeout(50, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
+		mySerialPort = new Serial(com_port, 57600U, Timeout(200, 200, 3, 200, 3), eightbits, parity_none, stopbits_one, flowcontrol_none);
 	}
 	catch (IOException e) {
 		cout << e.what();
@@ -339,22 +381,10 @@ int main(void) {
 		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 	}
 
-	// 1-3 tools, regular tracking mode
-	// >> GX_CMD_STR = "GX:800B";
-	// >> PSTAT_CMD_STR = "PSTAT:801f";
-	//
-	// 1-3 tools, tool ID mode
-	// >> GX_CMD_STR = "GX:9000";
-	// >> PSTAT_CMD_STR = "PSTAT:801f";
-	//
-	// 1-9 tools, regular tracking mode
-	// >> GX_CMD_STR = "GX:A00B";
-	// >> PSTAT_CMD_STR = "PSTAT:A01f";
-
 	// send PSTAT command to confirm tool configuration
 	// TODO: figure out why tool not listed properly (all zeros and a one)... mabye we're not sending the file correctly?
 	cout << "Sending appropriate PSTAT command..." << endl;
-	sendPolaris(mySerialPort, "PSTAT:801F");
+	sendPolaris(mySerialPort, cmd_str_pstat);
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
@@ -364,13 +394,45 @@ int main(void) {
 	readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
 	printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
 
+	std::string tmpstr;
+	istringstream is;
+	string line, this_line;
+	vector<string> all_lines;
 
 	while (1) {
 		// get data
 		cout << "Requesting data..." << endl;
-		sendPolaris(mySerialPort, "GX:800B");
+		sendPolaris(mySerialPort, cmd_str_gx);
 		readPolaris(mySerialPort, resp_buffer, RESP_BUF_SIZE, buff_size);
-		printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+		//printf("Read %d chars: <%s>\r\n", buff_size, resp_buffer);
+
+		tmpstr = std::string(resp_buffer, buff_size);
+		is = istringstream(tmpstr);
+		all_lines.clear();
+
+		while (getline(is, line)) {
+			all_lines.push_back(line);
+			cout << "Line: " << line << endl;
+		}
+		cout << "Read " << all_lines.size() << " lines..." << endl;
+
+		this_line = all_lines[5];
+		if (this_line.size() == 51) {
+			cout << "Line to analyze: " << this_line << endl;
+			q0 = ((float)atol(this_line.substr(0, 6).c_str())) / 10000.0f;
+			q1 = ((float)atol(this_line.substr(6, 6).c_str())) / 10000.0f;
+			q2 = ((float)atol(this_line.substr(12, 6).c_str())) / 10000.0f;
+			q3 = ((float)atol(this_line.substr(18, 6).c_str())) / 10000.0f;
+			tx = ((float)atol(this_line.substr(24, 7).c_str())) / 100.0f;
+			ty = ((float)atol(this_line.substr(31, 7).c_str())) / 100.0f;
+			tz = ((float)atol(this_line.substr(38, 7).c_str())) / 100.0f;
+			fit_err = ((float)atol(this_line.substr(45, 6).c_str())) / 10000.0f;
+			printf("q0: %7.4f, q1: %7.4f, q2: %7.4f, q3: %7.4f\r\n", q0, q1, q2, q3);
+			printf("tx: %8.2f, ty: %8.2f, tz: %8.2f\r\n", tx, ty, tz);
+			printf("Fit error: %7.4f\r\n", fit_err);
+		}
+
+
 		// int16_t q0_i,q1_i,q2_i,q3_i,tx_i,ty_i,tz_i,err_i;
 		// sscanf_s(buffer,"%06d%06d%06d%07d%07d%07d%06d",q0_i,q1_i,q2_i,q3_i,tx_i,ty_i,tz_i,err_i);
 	}
@@ -424,7 +486,7 @@ int sendPolaris(Serial* port, const void* ascii_cmd) {
 int readPolaris(Serial* port, char* resp_buffer, unsigned int max_buffer_size, unsigned int& buffer_size) {
 
 	// get response from polaris
-	std::string polaris_response = port->read(size_t(1024));
+	std::string polaris_response = port->read(size_t(RESP_BUF_SIZE));
 
 	if (polaris_response.back() != '\r') {
 		printf("ERROR: RESPONSE DOESN'T END IN <CR>!\r\n"); // TODO: Handle appropriately
